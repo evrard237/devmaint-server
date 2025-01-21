@@ -21,7 +21,6 @@ import sendEmail from "./utils/email.js";
 import Notification from "./db/models/notification.js";
 import setCorsHeaders from "./config/corsHeaders.js";
 
-
 const app = express();
 
 // app.use(credentials);
