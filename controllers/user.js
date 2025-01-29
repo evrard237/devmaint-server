@@ -2,6 +2,7 @@ import express from "express";
 
 import User from "../db/models/user.js";
 import CustomError from "../utils/customErrors.js";
+import Device from "../db/models/device.model.js";
 
 const app = express();
 app.use(express.json());
@@ -55,13 +56,16 @@ export const getUsers = async (req, res, next) => {
 
 export const getSingleUser = async (req, res, next) => {
   try {
+    console.log("received id", req.params.id);
+
     User.findById({ _id: req.params.id }).then((user) => {
       res.send(user);
     });
   } catch (error) {
-    return next(
-      new CustomError("There was an error fetching this specific user", 404)
-    );
+    next(error)
+    // return next(
+    //   new CustomError("There was an error fetching this specific user", error.status)
+    // );
   }
 };
 
@@ -72,6 +76,7 @@ export const updateUser = async (req, res, next) => {
       {
         $set: req.body,
       }
+      // Device.findByIdAndUpdate({})
     ).then(() => {
       res.status(200).json("User successfully Updated !!");
     });
