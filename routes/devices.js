@@ -12,7 +12,7 @@ const router = Router();
 router.get('/',protect,accessPermission(["admin","user"]), getDevices);
 router.get('/:id',protect,accessPermission(["admin","user"]) ,getDevice);
 router.get('/specific/:id',protect,accessPermission(["admin","guest"]),getDevicesPerDept);
-router.post('/',protect,accessPermission(["admin","user"]) ,createDevice);
+router.post('/create',protect,accessPermission(["admin","user"]) ,createDevice);
 router.patch('/:id',protect,accessPermission(["admin","user"]) ,updateDevice);
 router.delete('/:id',protect,accessPermission(["admin","user"]) ,restrict('admin'),deleteDevice);
 

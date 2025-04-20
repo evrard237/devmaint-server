@@ -133,14 +133,22 @@ export const login = async (req, res, next) => {
         { $set: { status: "online" } }
       );
 
+      let user_updated_info = {};
+      try {
+          user_updated_info = await User.findById({ _id: user._id });
+      } catch (error) {
+          console.error("Error fetching user:", error);
+      }
+
       res.status(200).json({
         error: false,
         accessToken,
         user: {
-          name: user.name,
-          email: user.email,
-          role: user.role,
-          department: user.department,
+          id: user_updated_info._id,
+          name: user_updated_info.name,
+          email: user_updated_info.email,
+          role: user_updated_info.role,
+          department: user_updated_info.department,
         },
         message: "Logged in sucessfully",
       });

@@ -20,6 +20,8 @@ import Device from "./db/models/device.model.js";
 import sendEmail from "./utils/email.js";
 import Notification from "./db/models/notification.js";
 import setCorsHeaders from "./config/corsHeaders.js";
+import bodyParser from "body-parser"
+
 
 const app = express();
 
@@ -30,6 +32,7 @@ app.use(cors(corsOptions));
 // app.use(json());
 app.use(express.json());
 app.use(cookieParser());
+app.use(bodyParser.urlencoded({ extended: true }));
 
 // cors middleware
 app.use(function (req, res, next) {
@@ -72,6 +75,8 @@ const prevDates = async () => {
     }
   );
 };
+
+
 
 const job = cron.schedule(
   "39 15 * * * ",

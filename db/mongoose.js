@@ -2,14 +2,16 @@
 
 import dotenv from "dotenv";
 import mongoose from "mongoose";
+import Grid from "gridfs-stream"
 
 dotenv.config();
 
 mongoose.Promise = global.Promise;
-// `mongodb+srv://evrardmodi:${process.env.DB_PASSWORD}@cluster0.ro4iufy.mongodb.net/`
-mongoose
+const mongoURI = `mongodb+srv://evrardmodi:${process.env.DB_PASSWORD}@cluster0.ro4iufy.mongodb.net/`
+
+ mongoose
   .connect(
-    `mongodb+srv://evrardmodi:${process.env.DB_PASSWORD}@cluster0.ro4iufy.mongodb.net/`,
+    mongoURI,
     { connectTimeoutMS: 60000 },
     { useNewUrlParser: true }
   )
@@ -21,11 +23,6 @@ mongoose
     console.log(e);
   });
 
-// to prevent deprectation warnings
-// mongoose.set('useCreateIndex', true);
-// mongoose.set('useFindAndModify', false);
 
-// module.exports ={
-//     mongoose
-// };
-export { mongoose };
+
+export { mongoose};

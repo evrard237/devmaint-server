@@ -16,16 +16,44 @@ const CalibrationSchema = new mongoose.Schema({
         required: true,
         unique: true
     },
-    diagnosis: String,
-    action: String,
-   
-    
+    department:{
+        type: String,
+        required: true
+    },
+    calibration_made:{
+        type: String,
+        required: true
+    },
+    calibration_result:{
+        type: String,
+        required: true
+    },
+    calibration_date:{
+        type: String,
+        required: true
+    },
+    next_calibration_date:{
+        type: String,
+        required: true
+    },
+    calibrated_by:{
+        type: String,
+        required: true
+    },
+    calibrator_phone_number:{
+        type: String,
+        required: true
+    },
+    notes:{
+        type: String,
+        required: true
+    },
 
 },{ timestamps: true }
 );
 
 
-const Calibration = mongoose.model('calibration',CalibrationSchema);
+const Calibration = mongoose.model('Calibration',CalibrationSchema);
 
 
 // export default {Department}
