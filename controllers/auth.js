@@ -13,6 +13,7 @@ import sendEmail from "../utils/email.js";
 import crypto from "crypto";
 import generateTokens from "../utils/generateTokens.js";
 import { credentials } from "../utils/credentials.js";
+import { broadcastUserStatus } from "../app.js";
 
 const app = express();
 dotenv.config();
@@ -133,6 +134,8 @@ export const login = async (req, res, next) => {
         { $set: { status: "online" } }
       );
 
+       broadcastUserStatus(user._id.toString(), "online");
+
       let user_updated_info = {};
       try {
           user_updated_info = await User.findById({ _id: user._id });
@@ -177,6 +180,10 @@ export const logout = async (req, res) => {
       { email: mail },
       { $set: { status: "offline" } }
     );
+    const user = await User.findOne({ email: mail });
+  if (user) {
+    broadcastUserStatus(user._id.toString(), "offline");
+  }
     res.json({ message: "cookie cleared" });
   } catch (error) {
     console.log("error", error);

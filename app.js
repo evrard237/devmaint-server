@@ -1,6 +1,6 @@
 import express from "express";
 
-import mongoose from "mongoose";
+
 import cors from "cors";
 
 import deviceRoutes from "./routes/devices.js";
@@ -20,12 +20,36 @@ import Device from "./db/models/device.model.js";
 import sendEmail from "./utils/email.js";
 import Notification from "./db/models/notification.js";
 import setCorsHeaders from "./config/corsHeaders.js";
-import bodyParser from "body-parser"
-
+import bodyParser from "body-parser";
+import http from "http";
+import { WebSocketServer } from "ws";
+import { mongoose } from "./db/mongoose.js";
 
 const app = express();
 
 // app.use(credentials);
+const server = http.createServer(app);
+console.log("websocket237 ",server);
+
+const wss = new WebSocketServer({ server });
+wss.on("connection", (ws) => {
+  console.log("WebSocket client connected");
+
+  // Optionally, handle messages from clients
+  ws.on("message", (message) => {
+    // Handle incoming messages if needed
+  });
+});
+
+// Helper to broadcast to all clients
+export function broadcastUserStatus(userId, status) {
+  const payload = JSON.stringify({ userId, status });
+  wss.clients.forEach((client) => {
+    if (client.readyState === 1) {
+      client.send(payload);
+    }
+  });
+}
 
 app.use(cors(corsOptions));
 
@@ -76,8 +100,6 @@ const prevDates = async () => {
   );
 };
 
-
-
 const job = cron.schedule(
   "39 15 * * * ",
   function () {
@@ -99,7 +121,7 @@ app.use("/maintenancecall", maintenanceCall);
 app.use("/maintenancereport", maintenanceReport);
 app.use(globalErrorHandler);
 
-app.listen(process.env.PORT, () => {
+server.listen(process.env.PORT, () => {
   console.log(process.env.NODE_ENV);
   console.log(`server is listening on port ${process.env.PORT}`);
 });

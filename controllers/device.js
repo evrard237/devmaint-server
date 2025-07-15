@@ -19,7 +19,7 @@ const s3 = new aws.S3({
 const upload = multer({
   storage: multerS3({
     s3,
-    bucket: process.env.S3_BUCKET, 
+    bucket: process.env.S3_BUCKET,
     metadata: (req, file, cb) => {
       cb(null, { fieldName: file.fieldname });
     },
@@ -32,8 +32,8 @@ const upload = multer({
 
 export const createDevice = async (req, res) => {
   const uploadSingle = upload.fields([
-    {name: "device_image", maxCount: 1},
-    {name: "device_manual", maxCount: 1}
+    { name: "device_image", maxCount: 1 },
+    { name: "device_manual", maxCount: 1 },
   ]);
 
   uploadSingle(req, res, async (err) => {
@@ -45,7 +45,7 @@ export const createDevice = async (req, res) => {
     // Variables to store the uploaded file keys for cleanup if needed
     let uploadedFiles = {
       device_image: null,
-      device_manual: null
+      device_manual: null,
     };
 
     try {
@@ -77,51 +77,67 @@ export const createDevice = async (req, res) => {
         installation_date: device.installation_date,
         warranty_due_date: device.warranty_due_date,
         notes: device.notes,
-        device_image_url: files.device_image ? files.device_image[0].location : null,
-        device_manual_url: files.device_manual ? files.device_manual[0].location : null,
+        device_image_url: files.device_image
+          ? files.device_image[0].location
+          : null,
+        device_manual_url: files.device_manual
+          ? files.device_manual[0].location
+          : null,
       });
 
       // Save the device to the database
       const savedDevice = await newDevice.save();
-      res.status(201).json({ success: true, data: savedDevice,message:"device successfully created" });
+      res
+        .status(201)
+        .json({
+          success: true,
+          data: savedDevice,
+          message: "device successfully created",
+        });
     } catch (error) {
       console.error("Error saving device:", error);
-      
+
       // Attempt to delete uploaded files if MongoDB save failed
       try {
         const deletePromises = [];
-        
+
         if (uploadedFiles.device_image) {
           deletePromises.push(
-            s3.deleteObject({
-              Bucket: process.env.S3_BUCKET,
-              Key: uploadedFiles.device_image
-            }).promise()
+            s3
+              .deleteObject({
+                Bucket: process.env.S3_BUCKET,
+                Key: uploadedFiles.device_image,
+              })
+              .promise()
           );
         }
-        
+
         if (uploadedFiles.device_manual) {
           deletePromises.push(
-            s3.deleteObject({
-              Bucket: process.env.S3_BUCKET,
-              Key: uploadedFiles.device_manual
-            }).promise()
+            s3
+              .deleteObject({
+                Bucket: process.env.S3_BUCKET,
+                Key: uploadedFiles.device_manual,
+              })
+              .promise()
           );
         }
-        
+
         if (deletePromises.length > 0) {
           await Promise.all(deletePromises);
-          console.log("Successfully deleted uploaded files from S3 due to MongoDB save failure");
+          console.log(
+            "Successfully deleted uploaded files from S3 due to MongoDB save failure"
+          );
         }
       } catch (s3Error) {
         console.error("Failed to delete uploaded files from S3:", s3Error);
         // Continue with the original error response even if cleanup fails
       }
-      
-      res.status(500).json({ 
-        success: false, 
+
+      res.status(500).json({
+        success: false,
         message: "Server error",
-        error: error.message 
+        error: error.message,
       });
     }
   });
@@ -164,14 +180,16 @@ export const getDevice = async (req, res) => {
 };
 
 export const updateDevice = async (req, res) => {
-  const uploadSingle = upload.single("device_image");
+  const uploadFiles = upload.fields([
+    { name: "device_image", maxCount: 1 },
+    { name: "device_manual", maxCount: 1 },
+  ]);
 
-  uploadSingle(req, res, async (err) => {
+  uploadFiles(req, res, async (err) => {
     if (err) {
       console.error("Multer upload error:", err);
       return res.status(400).json({ success: false, message: err.message });
     }
-
 
     try {
       const { id } = req.params;
@@ -186,54 +204,91 @@ export const updateDevice = async (req, res) => {
           .json({ success: false, message: "Device not found" });
       }
 
-      // 2. Handle image update if new file was uploaded
-      if (req.file) {
-        console.log("New image uploaded:", req.file.location);
+      // 2. Handle file updates
+      const filesToDelete = [];
+      const newFiles = {};
 
-        // Delete old image if it exists
+      // Process device image if uploaded
+      if (req.files?.device_image) {
+        newFiles.device_image_url = req.files.device_image[0].location;
         if (existingDevice.device_image_url) {
-          try {
-            const oldImageUrl = existingDevice.device_image_url;
-            const url = new URL(oldImageUrl);
-            const oldKey = url.pathname.substring(1); // Remove leading slash
-
-            console.log(`Attempting to delete old S3 object: ${oldKey}`);
-
-            await s3
-              .deleteObject({
-                Bucket: bucketName,
-                Key: oldKey,
-              })
-              .promise();
-
-            console.log("Successfully deleted old S3 object");
-          } catch (s3Error) {
-            console.error("Failed to delete old S3 object:", s3Error);
-            // Continue with update even if deletion fails
-          }
+          filesToDelete.push({
+            url: existingDevice.device_image_url,
+            type: "device_image",
+          });
         }
-
-        // Add new image URL to updates
-        updates.device_image_url = req.file.location;
       }
 
-      // 3. Prepare the updated device data
+      // Process device manual if uploaded
+      if (req.files?.device_manual) {
+        newFiles.device_manual_url = req.files.device_manual[0].location;
+        if (existingDevice.device_manual_url) {
+          filesToDelete.push({
+            url: existingDevice.device_manual_url,
+            type: "device_manual",
+          });
+        }
+      }
+
+      // 3. Delete old files from S3
+      if (filesToDelete.length > 0) {
+        await Promise.all(
+          filesToDelete.map(async (file) => {
+            try {
+              const oldKey = new URL(file.url).pathname.substring(1);
+              await s3
+                .deleteObject({
+                  Bucket: bucketName,
+                  Key: oldKey,
+                })
+                .promise();
+              console.log(`Deleted old ${file.type} from S3`);
+            } catch (s3Error) {
+              console.error(`Failed to delete old ${file.type}:`, s3Error);
+            }
+          })
+        );
+      }
+
+      // 4. Prepare the updated device data
       const updatedData = {
         ...updates,
+        ...newFiles,
         user: req.user?.name || "Unknown",
         updatedAt: new Date(),
       };
 
-      // 4. Update MongoDB
+      // 5. Update MongoDB
       const updatedDevice = await Device.findByIdAndUpdate(id, updatedData, {
         new: true,
         runValidators: true,
       });
 
       console.log("Device successfully updated:", updatedDevice);
-      res.status(200).json({ success: true, data: updatedDevice });
+      res.status(200).json("Device successfully Updated !!");
     } catch (error) {
       console.error("Error updating device:", error);
+
+      // Cleanup: Delete any newly uploaded files if update failed
+      if (req.files) {
+        await Promise.all(
+          Object.values(req.files).map(async (fileArray) => {
+            if (fileArray && fileArray[0]?.key) {
+              try {
+                await s3
+                  .deleteObject({
+                    Bucket: process.env.S3_BUCKET,
+                    Key: fileArray[0].key,
+                  })
+                  .promise();
+              } catch (cleanupError) {
+                console.error("Cleanup failed:", cleanupError);
+              }
+            }
+          })
+        );
+      }
+
       res.status(500).json({
         success: false,
         message: "Server error",

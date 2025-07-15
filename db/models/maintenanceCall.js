@@ -34,11 +34,11 @@ const MaintenanceCallSchema = new mongoose.Schema({
         length: 255
     },
     user_phone_number: Number,
-    // type:{
-    //     type: String,
-    //     enum: ['preventive','breakdown'],
-    //     default: 'breakdown'
-    // },
+    required_maintenance_type:{
+        type: String,
+        enum: ['preventive','breakdown'],
+        default: 'breakdown'
+    },
     // working_status:{
     //     type: String,
     //     enum: ['working', 'Not working','pending'],
