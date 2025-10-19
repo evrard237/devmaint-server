@@ -1,6 +1,6 @@
 import { protect, restrict } from '../controllers/auth.js';
 import express from "express"
-import { createUser, deleteUser, getSingleUser, getUsers, updateUser } from '../controllers/user.js';
+import { createUser, deleteUser, getSingleUser, getUsers, toggleRotationStatus, updateUser } from '../controllers/user.js';
 import { accessPermission } from '../permissions/user.js';
 // import { canViewUser } from '../permissions/user.js';
 
@@ -13,7 +13,9 @@ router.get('/',protect,accessPermission(["admin"]),getUsers);
 router.get("/:id",protect,accessPermission(["admin"]),getSingleUser),
 router.post('/create/',protect,accessPermission(["admin"]),createUser);
 router.patch("/update/:id",protect,accessPermission(["admin"]),updateUser);
-router.delete("/:id",protect,accessPermission(["admin"]),deleteUser)
+router.delete("/:id",protect,accessPermission(["admin"]),deleteUser);
+
+router.patch("/toggle-rotation/:id", protect, accessPermission(["admin"]), toggleRotationStatus);
 
 
 // function authGetUser(req,res,next) {

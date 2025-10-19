@@ -14,41 +14,38 @@ app.use(express.json());
 
 export const createMaintenanceCall = asyncErrorHandler(
   async (req, res, next) => {
-    let maintenanceCallInput = req.body;
+    const { device, maintenance_type, nature_of_problem } = req.body;
 
-    let newMaintenanceCall = new MaintenanceCall({
-      device_name: maintenanceCallInput.device_name,
-      model: maintenanceCallInput.model,
-      serial_number: maintenanceCallInput.serial_number,
-      department: req.user.department,
-      user_id: req.user._id,
-      user_designation: req.user.designation,
-      user_phone_number: req.user.phone_number,
-      call_status: "pending",
-      nature_of_problem: maintenanceCallInput.description,
-      date: new Date(),
-    });
-
+    // Prevent duplicate open calls for same device and type
     let exist = await MaintenanceCall.findOne({
-      serial_number: maintenanceCallInput.serial_number,
+      device,
+      maintenance_type,
+      call_status: "pending"
     });
 
     if (exist) {
-      res.status(400).json({ message: "Request already sent!!!" });
-    } else {
-      try {
-        await newMaintenanceCall.save().then((maintenanceCallDoc) => {
-          res.send(maintenanceCallDoc);
-        });
-        await Device.findOneAndUpdate(
-          { serial_number: maintenanceCallInput.serial_number },
-          { $set: { status: "Down" } }
-        ).then((response) => {
-          res.send(response);
-        });
-      } catch (error) {
-        next(error);
-      }
+      return res.status(400).json({ message: "Request already sent!!!" });
+    }
+
+    try {
+      const newMaintenanceCall = new MaintenanceCall({
+        device,
+        user: req.user._id,
+        department: req.user.department,
+        maintenance_type,
+        call_status: "pending",
+        nature_of_problem,
+        date: new Date(),
+      });
+
+      await newMaintenanceCall.save();
+
+      // Optionally update device status
+      await Device.findByIdAndUpdate(device, { $set: { status: "Down" } });
+
+      res.status(201).json(newMaintenanceCall);
+    } catch (error) {
+      next(error);
     }
   }
 );
@@ -58,37 +55,13 @@ export const createMaintenanceCall = asyncErrorHandler(
 export const getListMaintenanceCall = asyncErrorHandler(
   async (req, res, next) => {
     try {
-      // Fetch all maintenance calls
-      const list = await MaintenanceCall.find({});
-
-      // Use Promise.all to handle asynchronous operations for each item in the list
-      const result = await Promise.all(
-        list.map(async (listObj) => {
-          // Fetch user details for each maintenance call
-          const finalData = await User.findById({ _id: listObj.user_id });
-          const deviceData = await Device.findOne({serial_number: listObj.serial_number})
-
-          // Return the processed object
-          return {
-            device_name: deviceData.name,
-            model: deviceData.model,
-            serial_number: deviceData.serial_number,
-            department: listObj.department,
-            user_name: finalData.name,
-            user_designation: finalData.designation,
-            user_phone_number: finalData.phone_number,
-            call_status: listObj.call_status, 
-            nature_of_problem: listObj.nature_of_problem,
-            date: listObj.date,
-            createdAt: listObj.createdAt,
-          };
-        })
-      );
-
-      // Send the response once all data is processed
-      res.status(200).json(result);
+      const list = await MaintenanceCall.find({})
+        .populate('device')
+        .populate('user')
+        .populate('department');
+      res.status(200).json(list);
     } catch (error) {
-      next(error); // Pass the error to the error-handling middleware
+      next(error);
     }
   }
 );
@@ -96,26 +69,28 @@ export const getListMaintenanceCall = asyncErrorHandler(
 export const getMaintenanceCallsPerUser = asyncErrorHandler(
   async (req, res, next) => {
     try {
-      MaintenanceCall.findById({ user_name: req.user.name }).then(
-        (maintenanceCall) => {
-          res.send(maintenanceCall);
-        }
-      );
+      const calls = await MaintenanceCall.find({ user: req.user._id })
+        .populate('device')
+        .populate('user');
+      res.send(calls);
     } catch (error) {
       next(error);
     }
   }
 );
 
-export const getSingleMaintenanceCall = async (req, res) => {
-  try {
-    MaintenanceCall.findById({ _id: req.params.id }).then((maintenanceCall) => {
-      res.send(maintenanceCall);
-    });
-  } catch (error) {
-    next(error);
+export const getSingleMaintenanceCall = asyncErrorHandler(
+  async (req, res, next) => {
+    try {
+      const call = await MaintenanceCall.findById(req.params.id)
+        .populate('device')
+        .populate('user');
+      res.send(call);
+    } catch (error) {
+      next(error);
+    }
   }
-};
+);
 
 export const updateMaintenanceCall = asyncErrorHandler(
   async (req, res, next) => {

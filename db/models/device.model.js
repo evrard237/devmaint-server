@@ -27,8 +27,9 @@ const DeviceSchema = new mongoose.Schema(
       default: "hospital funds",
     },
     department: {
-      type: String,
-      // required: true,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Department",
+      required: true
     },
     user: {
       type: String,
@@ -36,7 +37,6 @@ const DeviceSchema = new mongoose.Schema(
     service_engineer_number: {
       type: Number,
     },
-
     status: {
       type: String,
       enum: ["Up", "Down"],
@@ -45,7 +45,7 @@ const DeviceSchema = new mongoose.Schema(
     maintenance_cycle: {
       type: String,
       enum: ["daily", "weekly", "monthly", "quarterly"],
-      default: "weekly",
+      default: "monthly",
     },
     purchase_date: {
       type: Date,
@@ -57,17 +57,18 @@ const DeviceSchema = new mongoose.Schema(
       required: true,
     },
     notes: { type: String },
-    device_image_url: { type: String, required: true }, // S3 file URL
-    device_manual_url: { type: String, required: true }, // S3 file URL
+    
+    // --- THIS IS THE CRITICAL FIX ---
+    // The image and manual are optional, so `required` must be `false` or removed.
+    device_image_url: { type: String, required: false }, // S3 file URL
+    device_manual_url: { type: String, required: false }, // S3 file URL
+
+    nextPreventiveDate: { type: Date },
+    nextCalibrationDate: { type: Date }
   },
   { timestamps: true }
 );
 
-// {
-//     type: String,
-//     enum: ['daily','weekly','monthly','trimestrial'],
-//     default: ''
-// }
 const Device = mongoose.model("Device", DeviceSchema);
 
 export default Device;

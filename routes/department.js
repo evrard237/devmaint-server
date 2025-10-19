@@ -14,21 +14,21 @@ const router = express.Router();
 router.get("/", protect, accessPermission(["admin", "user"]), getDepartments);
 router.get("/:id", protect, accessPermission(["admin", "user"]), getSingleDept),
   router.post(
-    "/",
+    "/create",
     protect,
-    accessPermission(["admin", "user"]),
+    accessPermission(["admin"]),
     createDepartment
   );
 router.patch(
   "/:id",
   protect,
-  accessPermission(["admin", "user"]),
+  accessPermission(["admin"]),
   updateDepartment
 );
 router.delete(
   "/:id",
   protect,
-  accessPermission(["admin", "user"]),
+  accessPermission(["admin"]),
   deleteDepartment
 );
 

@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 import validator from "validator";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
-import { type } from "os";
 
 const UserSchema = new mongoose.Schema(
   {
@@ -29,8 +28,9 @@ const UserSchema = new mongoose.Schema(
     },
     photo: String,
     department: {
-      type: String,
-      required: true,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Department",
+      required: true
     },
     password: {
       type: String,
@@ -38,21 +38,18 @@ const UserSchema = new mongoose.Schema(
       minlength: 8,
       select: false,
     },
-    // confirmPassword:{
-    //     type: String,
-    //     required: [true,'Please reenter the password'],
-    //     validate: {
-    //         validator: function(val){
-    //             return val == this.password
-    //         },
-    //         message:"Password & confirmPassword does not match"
-    //     }
-    // },
+    isOnRotation: {
+        type: Boolean,
+        default: false,
+    },
+    // --- THIS FIELD IS ADDED FOR CUSTOM SORTING ---
+    rotationOrder: {
+        type: Number,
+        default: 99, // Default to a high number so unsorted users appear last
+    },
     role: {
       type: String,
-
-      enum: ["admin", "user", "guest"],
-
+      enum: ["admin", "user", "guest", "technician"],
       default: "user",
     },
     status: {
@@ -68,11 +65,7 @@ const UserSchema = new mongoose.Schema(
 
 UserSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return next();
-
-  this.salt = await bcrypt.genSalt(Number(process.env.SALT));
-  this.password = await bcrypt.hash(this.password, this.salt);
-
-  this.confirmPassword = undefined;
+  this.password = await bcrypt.hash(this.password, 12); // Using a fixed salt factor is common
   next();
 });
 
@@ -82,28 +75,16 @@ UserSchema.methods.comparePasswordsInDb = async function (pwd, pwdDB) {
 
 UserSchema.methods.isPasswordChanged = async function (JWTTimestamp) {
   if (this.passwordChangedAt) {
-    const passwordChangedTimestamp = parseInt(
-      this.passwordChangedAt.getTime() / 1000,
-      10
-    );
-    // console.log(passwordChangedTimestamp, JWTTimestamp);
-
+    const passwordChangedTimestamp = parseInt(this.passwordChangedAt.getTime() / 1000, 10);
     return JWTTimestamp < passwordChangedTimestamp;
   }
-
   return false;
 };
 
 UserSchema.methods.createResetPasswordToken = function () {
   const resetToken = crypto.randomBytes(32).toString("hex");
-
-  this.passwordResetToken = crypto
-    .createHash("sha256")
-    .update(resetToken)
-    .digest("hex");
+  this.passwordResetToken = crypto.createHash("sha256").update(resetToken).digest("hex");
   this.passwordResetTokenExp = Date.now() + 10 * 60 * 1000;
-
-  //    console.log(resetToken,this.passwordResetToken);
   return resetToken;
 };
 

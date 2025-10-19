@@ -2,7 +2,7 @@
 
 export const canViewUser = (user,device) => {
     return (
-        user.role === "admin" || user.department === device.department
+        user.role === "admin" || user.department?.name === device.department.name
     )
 }
 

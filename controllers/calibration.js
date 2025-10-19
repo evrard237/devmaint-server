@@ -13,33 +13,31 @@ app.use(express.json());
 
 export const createCalibration = asyncErrorHandler(async (req, res, next) => {
   try {
-    let calibrationInput = req.body;
+    const {
+      device,
+      calibration_made,
+      calibration_result,
+      calibration_date,
+      next_calibration_date,
+      calibrated_by,
+      calibrator_phone_number,
+      notes
+    } = req.body;
 
-    const deviceInfo = await Device.findOne({
-      serial_number: calibrationInput.serial_number,
-    });
-    const depInfo = await Department.findOne({ name: calibrationInput.name });
-
-    let newCalibration = new Calibration({
-      device_name: deviceInfo.name,
-      model: deviceInfo.model,
-      serial_number: deviceInfo.serial_number,
-      department: depInfo.name,
-      calibration_made: calibrationInput.name,
-      calibration_result: calibrationInput.result,
-      calibration_date: calibrationInput.date,
-      next_calibration_date: calibrationInput.next_calibration_date,
-      calibrated_by: calibrationInput.calibrated_by,
-      calibrator_phone_number: calibrationInput.calibrator_phone_number,
-      notes: calibrationInput.notes,
+    const newCalibration = new Calibration({
+      device,
+      calibration_made,
+      calibration_result,
+      calibration_date,
+      next_calibration_date,
+      calibrated_by,
+      calibrator_phone_number,
+      notes,
     });
 
-    await newCalibration.save().then((calibrationDoc) => {
-      res.send(calibrationDoc);
-    });
+    await newCalibration.save();
+    res.status(201).json(newCalibration);
   } catch (error) {
-    console.log("error", error);
-
     next(error);
   }
 });
