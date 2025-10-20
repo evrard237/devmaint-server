@@ -8,6 +8,7 @@ export const canViewUser = (user,device) => {
 
 export const accessPermission = (permissions) =>{
     return(req,res,next) =>{
+       console.log("permissions",permissions);
        
         const userRole = req.user.role
         if(permissions.includes(userRole)){

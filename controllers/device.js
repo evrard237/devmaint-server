@@ -112,7 +112,10 @@ export const getDevices = async (req, res) => {
 
 export const getDevicesPerDept = async (req, res, next) => {
   try {
+    
+    
     const response = await Device.find({ department: req.params.id, status: { $eq: "Up" } });
+    console.log("this is called", response);
     if (response.length === 0) {
       res.send("empty array");
     } else {
