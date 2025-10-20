@@ -1,9 +1,8 @@
 import Device from "../db/models/device.model.js";
 import multer from "multer";
 import aws from "aws-sdk";
-// import multerS3 from "multer-s3";
-import moment from "moment";
 import multerS3 from "multer-s3";
+import moment from "moment";
 
 // AWS S3 Configuration
 const s3 = new aws.S3({
@@ -35,7 +34,7 @@ const calculateNextDate = (startDate, cycle) => {
         case 'weekly': return baseDate.add(1, 'weeks').toDate();
         case 'monthly': return baseDate.add(1, 'months').toDate();
         case 'quarterly': return baseDate.add(3, 'months').toDate();
-        default: return baseDate.add(1, 'months').toDate(); // Default to monthly if cycle is not specified
+        default: return baseDate.add(1, 'months').toDate();
     }
 };
 
@@ -81,8 +80,6 @@ export const createDevice = async (req, res) => {
         notes: device.notes,
         device_image_url: files.device_image ? files.device_image[0].location : null,
         device_manual_url: files.device_manual ? files.device_manual[0].location : null,
-        // --- THIS IS THE NEW LOGIC ---
-        // Automatically set the first preventive maintenance date upon creation.
         nextPreventiveDate: calculateNextDate(device.installation_date, device.maintenance_cycle),
       });
 
@@ -90,7 +87,6 @@ export const createDevice = async (req, res) => {
       res.status(201).json({ success: true, data: savedDevice, message: "Device successfully created" });
     } catch (error) {
       console.error("Error saving device:", error);
-      // Attempt to clean up orphaned S3 files if database save fails
       const deletePromises = [];
       if (uploadedFiles.device_image) {
         deletePromises.push(s3.deleteObject({ Bucket: process.env.S3_BUCKET, Key: uploadedFiles.device_image }).promise());
@@ -203,7 +199,6 @@ export const deleteDevice = async (req, res) => {
                 await s3.deleteObject({ Bucket: bucketName, Key: key }).promise();
             } catch (s3Error) {
                 console.error(`S3 deletion failed for ${url}:`, s3Error);
-                // Decide if you want to stop the process if S3 delete fails
             }
         }));
     }

@@ -4,7 +4,7 @@ import {
     login, 
     logout, 
     protect, 
-    forgotPass, 
+    forgotPassword, 
     passwordResert, 
     updatePassword 
 } from "../controllers/auth.js";
@@ -15,7 +15,7 @@ const router = express.Router();
 // Public routes (no authentication required)
 router.post('/signup', signup);
 router.post('/login', loginLimiter, login);
-router.post('/forgotpass', forgotPass);
+router.post('/forgotpass', forgotPassword);
 router.patch('/resetpassword', passwordResert);
 
 // Logout route
