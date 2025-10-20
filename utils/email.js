@@ -18,13 +18,13 @@ const transporter = nodemailer.createTransport({
     port: process.env.EMAIL_PORT,
     secure: false,
     auth:{
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_PASS
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASSWORD
        
     },
 })
 
-console.log("hello transporter");
+console.log("hello transporter",process.env.EMAIL_USER);
     // define email options
 
     const emailOptions ={
@@ -49,7 +49,7 @@ console.log("hello transporter");
             console.log("Email has been sent");
             
         } catch (error) {
-            console.error(error);
+            console.error('here is the error', error);
         }
     }
     sendMail(transporter,emailOptions)
