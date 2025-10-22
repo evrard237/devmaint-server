@@ -11,7 +11,7 @@ const s3 = new aws.S3({
   region: process.env.S3_BUCKET_REGION,
 });
 
-// Multer-S3 Configuration for file uploads
+// Multer-S3 Configuration (This is from your original working code)
 const upload = multer({
   storage: multerS3({
     s3,
@@ -26,7 +26,7 @@ const upload = multer({
   }),
 });
 
-// Helper function to calculate the next due date based on the maintenance cycle
+// Helper function to calculate the next due date
 const calculateNextDate = (startDate, cycle) => {
     const baseDate = moment(startDate);
     switch (cycle) {
@@ -38,7 +38,7 @@ const calculateNextDate = (startDate, cycle) => {
     }
 };
 
-export const createDevice = async (req, res) => {
+export const createDevice = (req, res, next) => {
   const uploadSingle = upload.fields([
     { name: "device_image", maxCount: 1 },
     { name: "device_manual", maxCount: 1 },
@@ -46,170 +46,144 @@ export const createDevice = async (req, res) => {
 
   uploadSingle(req, res, async (err) => {
     if (err) {
-      console.log("Multer error on create:", err);
       return res.status(400).json({ success: false, message: err.message });
     }
-
-    let uploadedFiles = { device_image: null, device_manual: null };
-
     try {
       const device = req.body;
-      const files = req.files;
-
-      if (files.device_image) {
-        uploadedFiles.device_image = files.device_image[0].key;
-      }
-      if (files.device_manual) {
-        uploadedFiles.device_manual = files.device_manual[0].key;
-      }
-
       const newDevice = new Device({
-        name: device.name,
-        model: device.model,
-        serial_number: device.serial_number,
-        brand: device.brand,
-        purchase_type: device.purchase_type,
-        department: device.department,
+        ...device,
         user: req.user?.name || "Unknown",
-        status: device.status,
-        maintenance_cycle: device.maintenance_cycle,
-        service_engineer_number: device.service_engineer_number,
-        purchase_date: device.purchase_date,
-        installation_date: device.installation_date,
-        warranty_due_date: device.warranty_due_date,
-        notes: device.notes,
-        device_image_url: files.device_image ? files.device_image[0].location : null,
-        device_manual_url: files.device_manual ? files.device_manual[0].location : null,
+        device_image_url: req.files?.device_image ? req.files.device_image[0].location : null,
+        device_manual_url: req.files?.device_manual ? req.files.device_manual[0].location : null,
         nextPreventiveDate: calculateNextDate(device.installation_date, device.maintenance_cycle),
       });
-
       const savedDevice = await newDevice.save();
       res.status(201).json({ success: true, data: savedDevice, message: "Device successfully created" });
     } catch (error) {
-      console.error("Error saving device:", error);
-      const deletePromises = [];
-      if (uploadedFiles.device_image) {
-        deletePromises.push(s3.deleteObject({ Bucket: process.env.S3_BUCKET, Key: uploadedFiles.device_image }).promise());
-      }
-      if (uploadedFiles.device_manual) {
-        deletePromises.push(s3.deleteObject({ Bucket: process.env.S3_BUCKET, Key: uploadedFiles.device_manual }).promise());
-      }
-      await Promise.all(deletePromises).catch(s3Error => console.error("Failed to clean up S3 files:", s3Error));
-      res.status(500).json({ success: false, message: "Server error", error: error.message });
+        if (req.files) {
+            const keysToDelete = Object.values(req.files).flat().map(file => ({ Key: file.key }));
+            if (keysToDelete.length > 0) {
+                s3.deleteObjects({ Bucket: process.env.S3_BUCKET, Delete: { Objects: keysToDelete } }).promise();
+            }
+        }
+        next(error);
     }
   });
 };
 
-export const getDevices = async (req, res) => {
+export const getDevices = async (req, res, next) => {
   try {
-    const devices = await Device.find({}).populate('department');
-    res.send(devices);
-  } catch (error) {
-    console.log(error);
-    res.status(500).send({ message: 'Error fetching devices' });
-  }
-};
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+    const status = req.query.status || '';
+    const department = req.query.department || '';
 
-export const getDevicesPerDept = async (req, res, next) => {
-  try {
-    
-    
-    const response = await Device.find({ department: req.params.id, status: { $eq: "Up" } });
-    console.log("this is called", response);
-    if (response.length === 0) {
-      res.send("empty array");
-    } else {
-      res.send(response);
+    const query = {};
+    if (search) {
+      query.$or = [
+          { name: { $regex: search, $options: 'i' } },
+          { brand: { $regex: search, $options: 'i' } },
+          { serial_number: { $regex: search, $options: 'i' } }
+      ];
     }
+    if (status) { query.status = status; }
+    if (department) { query.department = department; }
+
+    const [devices, total] = await Promise.all([
+      Device.find(query)
+        .populate('department')
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit),
+      Device.countDocuments(query)
+    ]);
+
+    res.status(200).json({
+      results: devices,
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    });
   } catch (error) {
     next(error);
   }
 };
 
-export const getDevice = async (req, res) => {
+export const getDevicesPerDept = async (req, res, next) => {
   try {
-    const device = await Device.findById(req.params.id);
-    res.send(device);
+    const response = await Device.find({ department: req.params.id, status: { $eq: "Up" } });
+    res.send(response);
   } catch (error) {
-    console.log(error);
-    res.status(500).send({ message: 'Error fetching single device' });
+    next(error);
   }
 };
 
-export const updateDevice = async (req, res) => {
+export const getDevice = async (req, res, next) => {
+  try {
+    const device = await Device.findById(req.params.id);
+    if (!device) return res.status(404).send({ message: 'Device not found' });
+    res.send(device);
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const updateDevice = (req, res, next) => {
   const uploadFiles = upload.fields([
     { name: "device_image", maxCount: 1 },
     { name: "device_manual", maxCount: 1 },
   ]);
 
   uploadFiles(req, res, async (err) => {
-    if (err) {
-      return res.status(400).json({ success: false, message: err.message });
-    }
+    if (err) { return res.status(400).json({ success: false, message: err.message }); }
     try {
       const { id } = req.params;
       const updates = req.body;
-      const bucketName = process.env.S3_BUCKET;
       const existingDevice = await Device.findById(id);
-      if (!existingDevice) {
-        return res.status(404).json({ success: false, message: "Device not found" });
-      }
-      const filesToDelete = [];
+      if (!existingDevice) { return res.status(404).json({ success: false, message: "Device not found" }); }
+      
       const newFiles = {};
       if (req.files?.device_image) {
         newFiles.device_image_url = req.files.device_image[0].location;
         if (existingDevice.device_image_url) {
-          filesToDelete.push({ url: existingDevice.device_image_url });
+            const oldKey = new URL(existingDevice.device_image_url).pathname.substring(1);
+            s3.deleteObject({ Bucket: process.env.S3_BUCKET, Key: oldKey }).promise();
         }
       }
       if (req.files?.device_manual) {
         newFiles.device_manual_url = req.files.device_manual[0].location;
         if (existingDevice.device_manual_url) {
-          filesToDelete.push({ url: existingDevice.device_manual_url });
+            const oldKey = new URL(existingDevice.device_manual_url).pathname.substring(1);
+            s3.deleteObject({ Bucket: process.env.S3_BUCKET, Key: oldKey }).promise();
         }
       }
-      if (filesToDelete.length > 0) {
-        await Promise.all(filesToDelete.map(async (file) => {
-            const oldKey = new URL(file.url).pathname.substring(1);
-            await s3.deleteObject({ Bucket: bucketName, Key: oldKey }).promise();
-        }));
-      }
-      const updatedData = { ...updates, ...newFiles, user: req.user?.name || "Unknown", updatedAt: new Date() };
+      const updatedData = { ...updates, ...newFiles, user: req.user?.name || "Unknown" };
       await Device.findByIdAndUpdate(id, updatedData, { new: true, runValidators: true });
       res.status(200).json("Device successfully Updated !!");
     } catch (error) {
-      console.error("Error updating device:", error);
-      res.status(500).json({ success: false, message: "Server error", error: error.message });
+      next(error);
     }
   });
 };
 
-export const deleteDevice = async (req, res) => {
+export const deleteDevice = async (req, res, next) => {
   try {
     const device = await Device.findById(req.params.id);
-    if (!device) {
-      return res.status(404).json({ success: false, message: "Device not found" });
-    }
-    const bucketName = process.env.S3_BUCKET;
+    if (!device) { return res.status(404).json({ success: false, message: "Device not found" }); }
+    
     const filesToDelete = [];
-    if (device.device_image_url) filesToDelete.push(device.device_image_url);
-    if (device.device_manual_url) filesToDelete.push(device.device_manual_url);
+    if (device.device_image_url) filesToDelete.push({ Key: new URL(device.device_image_url).pathname.substring(1) });
+    if (device.device_manual_url) filesToDelete.push({ Key: new URL(device.device_manual_url).pathname.substring(1) });
 
     if (filesToDelete.length > 0) {
-        await Promise.all(filesToDelete.map(async (url) => {
-            try {
-                const key = new URL(url).pathname.substring(1);
-                await s3.deleteObject({ Bucket: bucketName, Key: key }).promise();
-            } catch (s3Error) {
-                console.error(`S3 deletion failed for ${url}:`, s3Error);
-            }
-        }));
+      s3.deleteObjects({ Bucket: process.env.S3_BUCKET, Delete: { Objects: filesToDelete } }).promise();
     }
     
     await Device.findByIdAndDelete(req.params.id);
     res.status(200).json({ success: true, message: "Device and associated files deleted successfully" });
   } catch (error) {
-    console.error("Error deleting device:", error);
-    res.status(500).json({ success: false, message: "Server error while deleting device", error: error.message });
+    next(error);
   }
 };
