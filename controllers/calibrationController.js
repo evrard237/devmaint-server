@@ -7,7 +7,6 @@ import multerS3 from "multer-s3";
 import ExcelJS from 'exceljs';
 import moment from 'moment';
 
-// S3 File Upload Configuration
 const s3 = new aws.S3({
   accessKeyId: process.env.S3_ACCESS_KEY,
   secretAccessKey: process.env.S3_SECRET_ACCESS_KEY,
@@ -31,45 +30,68 @@ export const uploadCertificate = multer({
 
 export const createCalibrationLog = asyncErrorHandler(async (req, res, next) => {
     const logData = req.body;
-    let certificateUrl = null;
-
-    if (req.file) {
-        certificateUrl = req.file.location;
-    }
-
     try {
         const newLog = new CalibrationLog({
             ...logData,
-            certificateUrl: certificateUrl,
+            certificateUrl: req.file ? req.file.location : null,
         });
         await newLog.save();
-
-        await Device.findByIdAndUpdate(logData.device, {
-            $set: { nextCalibrationDate: logData.nextCalibrationDate }
-        });
-
+        await Device.findByIdAndUpdate(logData.device, { $set: { nextCalibrationDate: logData.nextCalibrationDate } });
         res.status(201).json(newLog);
     } catch (dbError) {
         if (req.file) {
-            try {
-                await s3.deleteObject({ Bucket: process.env.S3_BUCKET, Key: req.file.key }).promise();
-            } catch (s3Error) {
-                console.error(`Failed to delete orphaned S3 file: ${req.file.key}`, s3Error);
-            }
+            s3.deleteObject({ Bucket: process.env.S3_BUCKET, Key: req.file.key }).promise()
+              .catch(s3Error => console.error("Failed to delete orphaned S3 file:", s3Error));
         }
         next(dbError);
     }
 });
 
-export const getCalibrationLogsForDevice = asyncErrorHandler(async (req, res, next) => {
-    const { deviceId } = req.params;
-    const logs = await CalibrationLog.find({ device: deviceId }).sort({ lastCalibrated: -1 });
-    res.status(200).json(logs);
+export const getAllCalibrationLogs = asyncErrorHandler(async (req, res, next) => {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const search = req.query.search || '';
+
+    const query = {};
+    
+    const [logs, total] = await Promise.all([
+        CalibrationLog.find(query)
+            .populate('device', 'name')
+            .sort({ lastCalibrated: -1 })
+            .skip((page - 1) * limit)
+            .limit(limit),
+        CalibrationLog.countDocuments(query)
+    ]);
+
+    res.status(200).json({
+        results: logs,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+    });
 });
 
-export const getAllCalibrationLogs = asyncErrorHandler(async (req, res, next) => {
-    const logs = await CalibrationLog.find({}).populate('device', 'name').sort({ lastCalibrated: -1 });
-    res.status(200).json(logs);
+export const getCalibrationLogsForDevice = asyncErrorHandler(async (req, res, next) => {
+    const { deviceId } = req.params;
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 5;
+
+    const [logs, total] = await Promise.all([
+        CalibrationLog.find({ device: deviceId })
+            .sort({ lastCalibrated: -1 })
+            .skip((page - 1) * limit)
+            .limit(limit),
+        CalibrationLog.countDocuments({ device: deviceId })
+    ]);
+    
+    res.status(200).json({
+        results: logs,
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+    });
 });
 
 export const invalidateCalibrationLog = asyncErrorHandler(async (req, res, next) => {
@@ -80,7 +102,7 @@ export const invalidateCalibrationLog = asyncErrorHandler(async (req, res, next)
         { new: true }
     );
     if (!log) {
-        return res.status(404).json({ message: 'Calibration log not found' });
+        return res.status(404).json({ message: 'Log not found' });
     }
     res.status(200).json({ message: 'Log has been marked as an error.', log });
 });
@@ -104,7 +126,6 @@ export const exportCalibrationLogs = asyncErrorHandler(async (req, res, next) =>
         { header: 'Record Status', key: 'recordStatus', width: 20 },
     ];
     worksheet.getRow(1).font = { bold: true };
-    worksheet.getRow(1).alignment = { vertical: 'middle', horizontal: 'center' };
 
     logs.forEach(log => {
         worksheet.addRow({
@@ -119,14 +140,8 @@ export const exportCalibrationLogs = asyncErrorHandler(async (req, res, next) =>
         });
     });
 
-    res.setHeader(
-        'Content-Type',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
-    );
-    res.setHeader(
-        'Content-Disposition',
-        'attachment; filename="Calibration-Logs.xlsx"'
-    );
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="Calibration-Logs.xlsx"');
 
     await workbook.xlsx.write(res);
     res.end();
